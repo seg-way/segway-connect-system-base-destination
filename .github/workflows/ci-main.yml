@@ -15,6 +15,10 @@ on:
 jobs:
   meta:
     runs-on: ubuntu-latest
+    permissions:
+      packages: write    
+      contents: write    
+      pages: write
     outputs:
       dockerhub-publish: ${{ steps.dockerhub-publish.outputs.defined }}
       registry: ghcr.io/${{ github.repository_owner }}/containers/${{ github.event.repository.name }}:${{ fromJSON(steps.docker_action_meta.outputs.json).labels['org.opencontainers.image.version'] }}
@@ -27,7 +31,7 @@ jobs:
       new_release_version: ${{ steps.version.outputs.new_release_version }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
         with:
           submodules: false
           persist-credentials: false
@@ -41,13 +45,17 @@ jobs:
           node-version: "20"
       - name: Semantic Release
         id: version
-        uses: cycjimmy/semantic-release-action@v4.0.0
+        uses: cycjimmy/semantic-release-action@v3.4.2
         with:
-          # semantic_version: 19
+          semantic_version: 19.0.5
           extra_plugins: |
-            @semantic-release/exec
-            @semantic-release/git
-            conventional-changelog-conventionalcommits
+            @semantic-release/commit-analyzer@9.0.2
+            @semantic-release/release-notes-generator@10.0.3
+            @semantic-release/git@10.0.1
+            @semantic-release/github@8.1.0
+            @semantic-release/changelog@6.0.3
+            conventional-changelog-conventionalcommits@6.1.0
+            @semantic-release/exec@6.0.3            
           dry_run: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -75,9 +83,14 @@ jobs:
     runs-on: ubuntu-latest
     needs: [meta]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v3
         with:
           submodules: "recursive"
+      - uses: azure/setup-helm@v3
+
+      # - name: Lint Azure
+      #   run: |
+      #     helm lint chart -f tests/common/host.yaml -f tests/common/humio.yaml -f tests/common/sso.yaml -f tests/azure/basic.yaml
 
 
   Containerize:
@@ -89,7 +102,7 @@ jobs:
       pages: write
     steps:
       #Yes we need code
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v3
         with:
           submodules: false
           persist-credentials: false
@@ -106,9 +119,14 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Login to ghcr for helm
+        run: |
+          echo ${{ secrets.GITHUB_TOKEN }} | helm registry login --password-stdin -u ${{ github.repository_owner }} ghcr.io/${{ github.repository_owner }}
+
       - uses: actions/setup-node@v3
         with:
           node-version: "20"
+      - uses: azure/setup-helm@v3
       - name: Build and push
         uses: docker/build-push-action@v4
         with:
@@ -126,13 +144,17 @@ jobs:
       - name: Semantic Release
         if: github.event_name != 'pull_request'
         id: version
-        uses: cycjimmy/semantic-release-action@v4.0.0
+        uses: cycjimmy/semantic-release-action@v3.4.2
         with:
-          # semantic_version: 19
+          semantic_version: 19.0.5
           extra_plugins: |
-            @semantic-release/exec
-            @semantic-release/git
-            conventional-changelog-conventionalcommits
+            @semantic-release/commit-analyzer@9.0.2
+            @semantic-release/release-notes-generator@10.0.3
+            @semantic-release/git@10.0.1
+            @semantic-release/github@8.1.0
+            @semantic-release/changelog@6.0.3
+            conventional-changelog-conventionalcommits@6.1.0
+            @semantic-release/exec@6.0.3            
         env:
           GITHUB_TOKEN: ${{ github.token }}
           SEGWAY_CHARTS_WRITE: ${{ secrets.SEGWAY_CHARTS_WRITE }} 
